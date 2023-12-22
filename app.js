@@ -2,6 +2,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const graphqlHttp = require('express-graphql').graphqlHTTP;
 const { buildSchema } = require('graphql');
+const mongoose = require('mongoose');
 
 const app = express();
 
@@ -48,15 +49,23 @@ app.use('/graphql', graphqlHttp({
         createEvent: (args) => {
             const event = {
                 _id: Math.random().toString(),
-                title: args.title,
-                description: args.description,
-                price: +args.price, // + converts string to number
+                title: args.eventInput.title,
+                description: args.eventInput.description,
+                price: +args.eventInput.price, // + converts string to number
                 date: new Date().toISOString()
             };
             events.push(event);
+            return event;
         }
     },  
     graphiql: true
 }));
 
-app.listen(PORT, () => console.log("Server is running"));
+const user = process.env.MONGO_USER;
+const password = process.env.MONGO_PASSWORD;
+
+mongoose.connect(`mongodb+srv://${user}:${password}@eventsdb.pjku6qe.mongodb.net/?retryWrites=true&w=majority`).then(() => {
+                    app.listen(PORT, () => console.log("Server is running"));
+                }).catch(err => {
+                    console.log(err);
+                });
