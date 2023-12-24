@@ -6,7 +6,7 @@ const mongoose = require('mongoose');
 
 const app = express();
 
-const events = [];
+const Event = require('./models/events');
 
 app.use(bodyParser.json());
 
@@ -42,20 +42,35 @@ app.use('/graphql', graphqlHttp({
             query: RootQuery
             mutation: RootMutation
         }`),
+
+    // resolvers
     rootValue: {
         events: () => {
             return events;
         },
         createEvent: (args) => {
+            /*
             const event = {
                 _id: Math.random().toString(),
                 title: args.eventInput.title,
                 description: args.eventInput.description,
-                price: +args.eventInput.price, // + converts string to number
+                price: +args.eventInput.price, // '+' converts string to number
                 date: new Date().toISOString()
             };
-            events.push(event);
-            return event;
+            */
+            const event = new Event({
+                title: args.eventInput.title,
+                description: args.eventInput.description,
+                price: +args.eventInput.price, // '+' converts string to number
+                date: new Date().toISOString()
+            });
+            return event.save().then(result => {
+                console.log(result);
+                return { ...result._doc}
+            }).catch(err => {
+                console.log(err);
+                throw err;
+            });
         }
     },  
     graphiql: true
@@ -63,9 +78,11 @@ app.use('/graphql', graphqlHttp({
 
 const user = process.env.MONGO_USER;
 const password = process.env.MONGO_PASSWORD;
+const dbName = process.env.MONGO_DB;
 
-mongoose.connect(`mongodb+srv://${user}:${password}@eventsdb.pjku6qe.mongodb.net/?retryWrites=true&w=majority`).then(() => {
+mongoose.connect(`mongodb+srv://${user}:${password}@eventsdb.pjku6qe.mongodb.net/${dbName}?retryWrites=true&w=majority`).then(() => {
                     app.listen(PORT, () => console.log("Server is running"));
                 }).catch(err => {
                     console.log(err);
                 });
+
