@@ -3,10 +3,12 @@ const bodyParser = require('body-parser');
 const graphqlHttp = require('express-graphql').graphqlHTTP;
 const { buildSchema } = require('graphql');
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 const app = express();
 
 const Event = require('./models/events');
+const User = require('./models/users');
 
 app.use(bodyParser.json());
 
@@ -23,11 +25,23 @@ app.use('/graphql', graphqlHttp({
             date: String!
         }
 
+        type User {
+            _id: ID!
+            email: String!
+            password: String
+            createdEvents: [Event!]!
+        }
+
         input EventInput {
             title: String!
             description: String!
             price: Float!
-            date: String!
+            date: String
+        }
+
+        input UserInput {
+            email: String!
+            password: String!
         }
 
         type RootQuery {
@@ -35,7 +49,8 @@ app.use('/graphql', graphqlHttp({
         }
 
         type RootMutation {
-            createEvent(eventInput: EventInput): String
+            createEvent(eventInput: EventInput): Event
+            createUser(userInput: UserInput): User
         }
 
         schema { 
@@ -46,28 +61,61 @@ app.use('/graphql', graphqlHttp({
     // resolvers
     rootValue: {
         events: () => {
-            return events;
+            return Event.find().then(events => {
+                return events.map(event => {
+                    return { ...event._doc, _id: event.id };
+                });
+            }).catch(err => {
+                throw err;
+            });
         },
         createEvent: (args) => {
-            /*
-            const event = {
-                _id: Math.random().toString(),
-                title: args.eventInput.title,
-                description: args.eventInput.description,
-                price: +args.eventInput.price, // '+' converts string to number
-                date: new Date().toISOString()
-            };
-            */
             const event = new Event({
                 title: args.eventInput.title,
                 description: args.eventInput.description,
                 price: +args.eventInput.price, // '+' converts string to number
-                date: new Date().toISOString()
+                date: new Date().toISOString(),
+                creator: '5f9f9b7b6c6b3e1f1c9b3b1c'
             });
-            return event.save().then(result => {
-                console.log(result);
-                return { ...result._doc}
-            }).catch(err => {
+            let createdEvent;
+            return event.save()
+            .then(result => {
+                createdEvent = { ...result._doc, _id: result._doc._id.toString() };
+                return User.findById('5f9f9b7b6c6b3e1f1c9b3b1c')
+            })
+            .then(user => {
+                if (!user) {
+                    throw new Error('User not found.');
+                }
+                user.createdEvents.push(event);
+                return user.save();
+            })
+            .then(result => {
+                return createdEvent;
+            })
+            .catch(err => {
+                console.log(err);
+                throw err;
+            });
+        },
+        createUser: (args) => {
+            return User.findOne({ email: args.userInput.email }).then(user => {
+                if (user) {
+                    throw new Error('User exists already.');
+                }
+                return bcrypt.hash(args.userInput.password, 12);
+            })
+            .then(hashedPassword => {
+                const user = new User({
+                    email: args.userInput.email,
+                    password: hashedPassword
+                });
+                return user.save();
+            })
+            .then(result => {
+                return { ...result._doc, password: null, _id: result.id };
+            })
+            .catch(err => {
                 console.log(err);
                 throw err;
             });
